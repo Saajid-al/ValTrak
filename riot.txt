@@ -1,0 +1,4 @@
+1624346c-1da8-4574-bf84-358ec4973283
+
+
+Note. Scraping is only used for testing purposes. My actual model would use real data to do the comparisons. Github repo is currently set to public until application is accepted or denied
