@@ -1,17 +1,55 @@
+from django.shortcuts import render
+
+from django.http import HttpResponse
+# stats/views.py
+
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+import json
 from selenium import webdriver
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
-def grab_stats(url):
-    # Initialize the WebDriver
+@csrf_exempt
+def get_user_stats(request):
+    if request.method == "POST":
+        # Extract the username from the request body
+        body = json.loads(request.body)
+        user = body.get("username")
+
+        # checking if the username is provided in the first place
+        if not user:
+            return JsonResponse({"error": "Username is required"}, status=400)
+
+        # calling grab stats function (selenium)
+        stats = grab_stats(user)
+        if stats is None:
+            return JsonResponse({"error": "Failed to retrieve stats or user does not exist"}, status=404)
+        
+        return JsonResponse({"stats": stats}, status=200)
+    
+    return JsonResponse({"error": "Invalid request method"}, status=405)
+
+def grab_stats(user):
+    name, id = user.split("#")
     driver = webdriver.Chrome()
+    baseUrl = "https://tracker.gg/valorant/profile/riot/"
+    encoded_id = f'%23{id}'  # Encoding the '#' character to '%23'
+    url = f"{baseUrl}{name}{encoded_id}"
     driver.get(url)
+
+    stats = None
 
     try:
         # Wait until the title contains "Valorant"
         WebDriverWait(driver, 20).until(EC.title_contains("Valorant"))
+
+        if "Page Not Found" in driver.page_source or "Not Found" in driver.page_source:
+            raise NoSuchElementException("The requested user profile does not exist.")
+
+
 
         # Wait for the giant stats container to be present
         WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CLASS_NAME, "giant-stats")))
@@ -31,9 +69,8 @@ def grab_stats(url):
             "Win %": float(win_percentage.strip('%'))
         }
 
-    except NoSuchElementException as e:
-        print(f"Error: Could not locate an element on the page. Details: {e}")
-        stats = None
+    except (NoSuchElementException, TimeoutException) as e:
+        print(f"Error: Could not locate an element or the page took too long to load. Details: {e}")
 
     finally:
         # Quit the driver
@@ -41,31 +78,5 @@ def grab_stats(url):
 
     return stats
 
-def compare_stats(url1, url2):
-    # Grab stats for both profiles
-    stats1 = grab_stats(url1)
-    stats2 = grab_stats(url2)
-
-    # Check if stats were successfully retrieved for both players
-    if stats1 is None or stats2 is None:
-        print("Failed to retrieve stats for one or both players.")
-        return
-
-    # Compare and print the stats side by side, highlighting differences
-    print("\nComparison of Stats:")
-    for key in stats1.keys():
-        stat1 = stats1[key]
-        stat2 = stats2[key]
-        difference = stat1 - stat2
-        if difference > 0:
-            print(f"{key}: Player 1 - {stat1} | Player 2 - {stat2} | Player 1 is +{difference} compared to Player 2")
-        elif difference < 0:
-            print(f"{key}: Player 1 - {stat1} | Player 2 - {stat2} | Player 2 is +{-difference} compared to Player 1")
-        else:
-            print(f"{key}: Player 1 - {stat1} | Player 2 - {stat2} | No difference")
-
-# Example usage
-url1 = "https://tracker.gg/valorant/profile/riot/Zleepy%235065/overview"
-url2 = "https://tracker.gg/valorant/profile/riot/Hiroshi%23kota/overview"
-
-compare_stats(url1, url2)
+def home(request):
+    return HttpResponse("Hello, this is the stats home page!")
